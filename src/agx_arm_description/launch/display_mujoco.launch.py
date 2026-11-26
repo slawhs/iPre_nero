@@ -125,7 +125,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "scene",
             default_value="scene.xml",
-            choices=["scene.xml", "scene_nero_arm.xml", "nero.xml", "nero_arm.xml"],
+            choices=["scene.xml", "scene_nero_arm.xml", "scene_nero_cubo.xml", "nero.xml", "nero_arm.xml"],
             description="Archivo MuJoCo a cargar dentro de agilex_arm/agilex_nero/",
         ),
         DeclareLaunchArgument(
