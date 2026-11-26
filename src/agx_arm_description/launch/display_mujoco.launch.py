@@ -69,6 +69,7 @@ def launch_setup(context, *args, **kwargs):
     scene = LaunchConfiguration("scene").perform(context)
     model_dir_arg = LaunchConfiguration("model_dir").perform(context)
     script_arg = LaunchConfiguration("viewer_script").perform(context)
+    bridge_args = LaunchConfiguration("bridge_args").perform(context).split()
 
     # ---- escena ----
     model_dirs = []
@@ -116,7 +117,11 @@ def launch_setup(context, *args, **kwargs):
     return [
         LogInfo(msg=f"[display_mujoco] escena: {scene_file}"),
         LogInfo(msg=f"[display_mujoco] script: {script_path}"),
-        ExecuteProcess(cmd=["python3", script_path, scene_file], output="screen"),
+        ExecuteProcess(
+            cmd=["python3", script_path, scene_file]
+            + (["--ros-args", *bridge_args] if bridge_args else []),
+            output="screen",
+        ),
     ]
 
 
@@ -137,6 +142,11 @@ def generate_launch_description():
             "viewer_script",
             default_value="",
             description="Ruta a mujoco_viewer.py (opcional)",
+        ),
+        DeclareLaunchArgument(
+            "bridge_args",
+            default_value="",
+            description="Argumentos ROS extra para el puente MuJoCo, p. ej. '-p proximity.topic:=proximity_sim'",
         ),
         OpaqueFunction(function=launch_setup),
     ])

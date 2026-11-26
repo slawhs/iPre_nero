@@ -34,6 +34,7 @@ setup(
             'waypoint_sender = grupo2_pkg.waypoint_sender:main',
             'pose_probe = grupo2_pkg.pose_probe:main',
             'proximity_sensor_node = grupo2_pkg.proximity_sensor_node:main',
+            'cubo_hil = grupo2_pkg.cubo_hil:main',
         ],
     },
 )
