@@ -32,6 +32,7 @@ setup(
             'interceptar_cubo = grupo2_pkg.interceptar_cubo:main',
             'recoger_cubo = grupo2_pkg.recoger_cubo:main',
             'waypoint_sender = grupo2_pkg.waypoint_sender:main',
+            'quest_teleop = grupo2_pkg.quest_teleop:main',
             'pose_probe = grupo2_pkg.pose_probe:main',
             'proximity_sensor_node = grupo2_pkg.proximity_sensor_node:main',
         ],
