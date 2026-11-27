@@ -11,7 +11,7 @@ class ProximitySerialNode(Node):
         super().__init__('proximity_serial_node')
 
         self.declare_parameter('port', '/dev/ttyUSB0')
-        self.declare_parameter('baud', 9600)
+        self.declare_parameter('baud', 115200)
         self.declare_parameter('topic', 'proximity')
         self.declare_parameter('frame_id', 'proximity_link')
         self.declare_parameter('min_range', 0.04)

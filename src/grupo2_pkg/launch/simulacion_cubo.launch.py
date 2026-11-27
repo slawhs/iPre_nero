@@ -141,7 +141,7 @@ def nodos_hil(context, *args, **kwargs):
             output='screen',
             parameters=[{
                 'port': LaunchConfiguration('sensor_port').perform(context),
-                'baud': 9600,
+                'baud': 115200,
             }],
         ),
         Node(
