@@ -109,7 +109,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "scene",
             default_value="scene_nero_arm.xml",
-            choices=["scene.xml", "scene_nero_arm.xml", "nero.xml", "nero_arm.xml"],
+            choices=["scene.xml", "scene_nero_arm.xml", "scene_nero_cubo.xml", "nero.xml", "nero_arm.xml"],
             description="Escena MuJoCo (solo mode:=sim)",
         ),
         DeclareLaunchArgument(

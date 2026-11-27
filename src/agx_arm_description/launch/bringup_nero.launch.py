@@ -128,7 +128,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "scene",
             default_value="scene.xml",
-            choices=["scene.xml", "scene_nero_arm.xml", "nero.xml", "nero_arm.xml"],
+            choices=["scene.xml", "scene_nero_arm.xml", "scene_nero_cubo.xml", "nero.xml", "nero_arm.xml"],
             description="Escena MuJoCo a cargar (se pasa a display_mujoco.launch.py)",
         ),
         DeclareLaunchArgument(
