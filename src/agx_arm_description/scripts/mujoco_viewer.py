@@ -48,6 +48,7 @@ import mujoco.viewer
 
 import rclpy
 from rclpy.node import Node
+from rclpy.utilities import remove_ros_args
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped, PoseArray
 
@@ -676,7 +677,8 @@ def main():
     parser.add_argument('--flange-zero-identity', action='store_true',
                         default=os.environ.get('NERO_FLANGE_ZERO_IDENTITY', '') in ('1', 'true', 'True'),
                         help='Orientacion de la brida relativa a la pose en cero (identidad con q=0)')
-    args = parser.parse_args()
+    # Los argumentos --ros-args (p. ej. -p proximity.topic:=...) son para rclpy.
+    args = parser.parse_args(remove_ros_args(sys.argv)[1:])
 
     rclpy.init(args=sys.argv)
     bridge = MujocoBridge(args.scene, args.control_topic, args.feedback_topic, args.rate,

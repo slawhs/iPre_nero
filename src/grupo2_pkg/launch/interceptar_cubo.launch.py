@@ -6,6 +6,7 @@ estima la velocidad del cubo con /proximity y mueve el brazo por /commands/waypo
 Ejemplos:
   ros2 launch grupo2_pkg interceptar_cubo.launch.py
   ros2 launch grupo2_pkg interceptar_cubo.launch.py cube_speed:=0.12 rviz:=true
+  ros2 launch grupo2_pkg interceptar_cubo.launch.py hil:=true     # cubo real + sensor por USB
 """
 
 import os
@@ -26,6 +27,9 @@ def generate_launch_description():
             'cube_speed': LaunchConfiguration('cube_speed'),
             'cube_delay': LaunchConfiguration('cube_delay'),
             'rviz': LaunchConfiguration('rviz'),
+            'hil': LaunchConfiguration('hil'),
+            'sensor_port': LaunchConfiguration('sensor_port'),
+            'sensor_y': LaunchConfiguration('sensor_y'),
         }.items(),
     )
 
@@ -36,5 +40,11 @@ def generate_launch_description():
                               description='Segundos antes de arrancar la cinta (brazo ya en posicion)'),
         DeclareLaunchArgument('rviz', default_value='false', choices=['true', 'false'],
                               description='Lanzar RViz2 junto a MuJoCo'),
+        DeclareLaunchArgument('hil', default_value='false', choices=['true', 'false'],
+                              description='Hardware in the loop: el cubo sigue al sensor real por USB'),
+        DeclareLaunchArgument('sensor_port', default_value='/dev/ttyACM0',
+                              description='Puerto serie del Arduino del sensor (solo hil:=true)'),
+        DeclareLaunchArgument('sensor_y', default_value='-0.90',
+                              description='Posicion en la via (y mundo) del sensor real (solo hil:=true)'),
         base,
     ])

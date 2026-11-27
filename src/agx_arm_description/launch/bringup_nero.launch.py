@@ -99,7 +99,10 @@ def launch_setup(context, *args, **kwargs):
 
     mujoco_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(mujoco_launch),
-        launch_arguments={"scene": LaunchConfiguration("scene")}.items(),
+        launch_arguments={
+            "scene": LaunchConfiguration("scene"),
+            "bridge_args": LaunchConfiguration("bridge_args"),
+        }.items(),
     )
 
     rsp = Node(
@@ -142,6 +145,11 @@ def generate_launch_description():
             default_value="true",
             choices=["true", "false"],
             description="Lanzar RViz2 (true/false). robot_state_publisher se lanza siempre",
+        ),
+        DeclareLaunchArgument(
+            "bridge_args",
+            default_value="",
+            description="Argumentos ROS extra para el puente MuJoCo, p. ej. '-p proximity.topic:=proximity_sim'",
         ),
         OpaqueFunction(function=launch_setup),
     ])

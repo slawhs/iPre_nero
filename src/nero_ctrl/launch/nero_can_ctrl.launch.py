@@ -85,7 +85,11 @@ def launch_setup(context, *args, **kwargs):
                 "bringup_nero.launch.py",
             )
         ),
-        launch_arguments={"scene": scene, "rviz": rviz}.items(),
+        launch_arguments={
+            "scene": scene,
+            "rviz": rviz,
+            "bridge_args": LaunchConfiguration("bridge_args"),
+        }.items(),
     )
     # MuJoCo tarda en cargar; si can_module manda la pose inicial antes de que el
     # bridge se haya suscrito a control/move_j, ese mensaje se pierde. Se retrasan
@@ -122,6 +126,11 @@ def generate_launch_description():
             "start_delay",
             default_value="2.0",
             description="Segundos de espera antes de lanzar main_node/can_module (solo mode:=sim)",
+        ),
+        DeclareLaunchArgument(
+            "bridge_args",
+            default_value="",
+            description="Argumentos ROS extra para el puente MuJoCo (solo mode:=sim), p. ej. '-p proximity.topic:=proximity_sim'",
         ),
         OpaqueFunction(function=launch_setup),
     ])

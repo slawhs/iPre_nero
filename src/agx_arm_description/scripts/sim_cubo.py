@@ -12,6 +12,17 @@ Mueve el cubo "cubo_movil" (joint libre "cubo_free") e informa su estado.
 velocidad (vx, vy, vz) durante "duracion" segundos de simulacion; despues la cinta
 se para (velocidad 0) y retiene el cubo.
 
+Modo seguimiento (hardware in the loop):
+  escucha  /control/cubo_seguir     Float64MultiArray  [x, y, z, vx, vy, vz]
+Estado medido de un cubo real (marco mundo). La cinta deja de usar una velocidad
+fija y lleva el cubo a esa posicion: v_cinta = v + K_SEGUIR * (p_extrapolada - p).
+Mientras el cubo toca el robot la cinta solo sigue la velocidad medida, como una
+cinta real: no lo arranca de la pinza persiguiendo la posicion del cubo real.
+La primera orden teletransporta el cubo; tras SEGUIR_TIMEOUT sin ordenes, solo si
+esta a mas de SALTO_SEGUIR. Sin ordenes durante SEGUIR_TIMEOUT se deja de
+extrapolar y la cinta lo retiene.
+Una orden de /control/cubo sale del modo seguimiento.
+
 La cinta actua por fuerzas, como una real: mientras el cubo esta a la altura de la
 cinta, el rozamiento lleva su velocidad a la de la cinta, un resorte lo mantiene a
 esa altura y derecho, y se amortigua su giro. Si algo lo bloquea, la cinta lo sigue
@@ -36,6 +47,11 @@ RIGIDEZ_GIRO = 0.01       # N·m/rad, mantiene el cubo derecho
 AMORT_GIRO = 5e-5         # N·m/(rad/s)
 ALTURA_CONTACTO = 0.01    # m, por encima la cinta no toca el cubo
 
+K_SEGUIR = 4.0            # 1/s, ganancia de posicion del modo seguimiento
+V_MAX_SEGUIR = 0.5        # m/s, velocidad maxima de la cinta al seguir
+SEGUIR_TIMEOUT = 0.6      # s de simulacion sin ordenes: se deja de extrapolar
+SALTO_SEGUIR = 0.05       # m, error a partir del cual se teletransporta al reanudar
+
 
 class SimCubo:
     def __init__(self, node, model, data, lock, rate_hz=100.0):
@@ -44,6 +60,7 @@ class SimCubo:
         self.data = data
         self.lock = lock
         self.cinta = None   # (z_cinta, v_cinta, t_fin) en tiempo de simulacion
+        self.seguir = None  # (p, v, t_recepcion) del modo seguimiento, tiempo de simulacion
 
         self.body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, CUBE_BODY)
         joint = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, CUBE_JOINT)
@@ -66,8 +83,10 @@ class SimCubo:
 
         self.contacto = False
         self.agarre = False
+        self.toca_robot = False   # contacto con el robot ahora (contacto queda latcheado)
 
         node.create_subscription(Float64MultiArray, '/control/cubo', self._on_cmd, 10)
+        node.create_subscription(Float64MultiArray, '/control/cubo_seguir', self._on_seguir, 10)
         self.pub_pose = node.create_publisher(PoseStamped, '/feedback/cubo_pose', 10)
         self.pub_contacto = node.create_publisher(Bool, '/feedback/cubo_contacto', 10)
         self.pub_agarre = node.create_publisher(Bool, '/feedback/cubo_agarre', 10)
@@ -94,11 +113,52 @@ class SimCubo:
             qd[self.vadr:self.vadr + 3] = v
             qd[self.vadr + 3:self.vadr + 6] = 0.0
             self.cinta = (float(p0[2]), v, self.data.time + float(msg.data[6]))
+            self.seguir = None
             self.contacto = False
             self.agarre = False
         self.node.get_logger().info(
             f'Cinta del cubo: desde {np.round(p0, 3)} a {np.round(v, 3)} m/s '
             f'durante {msg.data[6]:.1f} s.')
+
+    def _on_seguir(self, msg):
+        if len(msg.data) != 6:
+            self.node.get_logger().warn('/control/cubo_seguir espera [x, y, z, vx, vy, vz].')
+            return
+        p = np.array(msg.data[0:3])
+        v = np.array(msg.data[3:6])
+        with self.lock:
+            t = self.data.time
+            nuevo = self.seguir is None or (
+                t - self.seguir[2] > SEGUIR_TIMEOUT
+                and np.linalg.norm(p - self.data.xpos[self.body]) > SALTO_SEGUIR)
+            if nuevo:
+                q, qd = self.data.qpos, self.data.qvel
+                q[self.qadr:self.qadr + 3] = p
+                q[self.qadr + 3:self.qadr + 7] = (1.0, 0.0, 0.0, 0.0)
+                qd[self.vadr:self.vadr + 6] = 0.0
+                self.contacto = False
+                self.agarre = False
+            self.seguir = (p, v, t)
+            self.cinta = (float(p[2]), np.zeros(3), float('inf'))
+        if nuevo:
+            self.node.get_logger().info(
+                f'Cinta del cubo: siguiendo al cubo real desde {np.round(p, 3)}.')
+
+    def _v_seguir(self):
+        """Velocidad de cinta que lleva el cubo al estado medido (extrapolado)."""
+        p, v, t = self.seguir
+        edad = self.data.time - t
+        if edad > SEGUIR_TIMEOUT:
+            v, edad = np.zeros(3), SEGUIR_TIMEOUT  # sin lecturas: lo retiene ahi
+        if self.toca_robot:
+            cmd = v.copy()  # como una cinta real: arrastra a su velocidad, sin mas
+        else:
+            objetivo = p + v * edad
+            cmd = v + K_SEGUIR * (objetivo - self.data.xpos[self.body])
+        norma = np.linalg.norm(cmd)
+        if norma > V_MAX_SEGUIR:
+            cmd *= V_MAX_SEGUIR / norma
+        return cmd
 
     def step(self):
         """Fuerzas de la cinta sobre el cubo. Llamar antes de mj_step, con el lock tomado."""
@@ -110,7 +170,9 @@ class SimCubo:
         z = self.data.xpos[self.body][2]
         if z - z_cinta > ALTURA_CONTACTO:
             return  # levantado: la cinta no lo toca
-        if self.data.time >= t_fin:
+        if self.seguir is not None:
+            v = self._v_seguir()
+        elif self.data.time >= t_fin:
             v = np.zeros(3)  # cinta parada: retiene el cubo
         vel = self.data.qvel[self.vadr:self.vadr + 3]
         w = self.data.qvel[self.vadr + 3:self.vadr + 6]   # marco local del cubo
@@ -143,6 +205,7 @@ class SimCubo:
             if robot and not self.contacto:
                 self.node.get_logger().info('Cinta del cubo: el cubo toca el robot.')
             self.contacto = self.contacto or robot
+            self.toca_robot = robot
             self.agarre = agarre
             p_w = self.data.xpos[self.body].copy()
             R_w = self.data.xmat[self.body].reshape(3, 3).copy()

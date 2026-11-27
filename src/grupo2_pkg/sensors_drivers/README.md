@@ -8,7 +8,7 @@ ULTRASOUND, cono 0.26 rad, 0.04–5.0 m).
 Cargar `Sensor_proximidad_arduino_r4.ino` en el Arduino y lanzar el puente serie:
 
 ```bash
-ros2 run grupo2_pkg proximity_sensor_node --ros-args -p port:=/dev/ttyACM0 -p baud:=9600
+ros2 run grupo2_pkg proximity_sensor_node --ros-args -p port:=/dev/ttyACM0 -p baud:=115200
 ```
 
 ## Simulado: MuJoCo

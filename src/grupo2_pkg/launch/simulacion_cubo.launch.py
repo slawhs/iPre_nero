@@ -8,6 +8,16 @@ Levanta:
      Una rutina opcional `routine` de grupo2_pkg los publica.
   3. Opcional: la cinta automatica (cube:=true).
 
+Hardware in the loop (hil:=true): en vez de la cinta automatica, el cubo simulado
+sigue al cubo real que mide el sensor URM37 conectado por USB.
+  - proximity_sensor_node publica la lectura real en /proximity (la que usa la rutina).
+  - el sensor simulado pasa a /proximity_sim, para compararlos.
+  - cubo_hil convierte /proximity en /control/cubo_seguir y el puente mueve el cubo.
+  - la rutina y cubo_hil usan sensor_y: el sensor real esta en y = sensor_y de la
+    via, asi que el encuentro (y = 0 en recoger_cubo) queda a -sensor_y - 0.02 m
+    del sensor. Con una mesa corta, p. ej. sensor_y:=-0.40.
+  - cube:=, cube_speed:= y cube_delay:= no se usan.
+
 La rutina y la cinta arrancan cuando can_module termina la pose inicial. Se reenvia
 /start_running_nodes (ver orden_arranque) porque esa pose inicial depende de un
 mensaje que can_module puede perderse por una carrera de arranque.
@@ -17,6 +27,7 @@ Ejemplos:
   ros2 launch grupo2_pkg simulacion_cubo.launch.py
   ros2 launch grupo2_pkg simulacion_cubo.launch.py cube_speed:=0.04 rviz:=true
   ros2 launch grupo2_pkg simulacion_cubo.launch.py routine:=interceptar_cubo
+  ros2 launch grupo2_pkg simulacion_cubo.launch.py hil:=true sensor_port:=/dev/ttyACM0
 """
 
 import os
@@ -33,7 +44,7 @@ from launch.actions import (
 )
 from launch.event_handlers import OnProcessIO
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
 ESCENA = 'scene_nero_cubo.xml'
@@ -80,6 +91,7 @@ def nodos_tras_pose_inicial(context, *args, **kwargs):
     def arg(nombre):
         return LaunchConfiguration(nombre).perform(context)
 
+    hil = arg('hil') == 'true'
     acciones = [Node(
         package='grupo2_pkg',
         executable='waypoint_manager',
@@ -91,9 +103,10 @@ def nodos_tras_pose_inicial(context, *args, **kwargs):
             package='grupo2_pkg',
             executable=arg('routine'),
             output='screen',
+            parameters=[{'sensor_y': float(arg('sensor_y'))}] if hil else [],
         ))
 
-    if arg('cube') == 'true':
+    if arg('cube') == 'true' and not hil:
         v = float(arg('cube_speed'))
         retardo = float(arg('cube_delay'))
         # Cubo quieto a la entrada de la cinta hasta que arranca.
@@ -117,6 +130,33 @@ def al_terminar_pose_inicial(acciones):
     return RegisterEventHandler(OnProcessIO(on_stdout=handler, on_stderr=handler))
 
 
+def nodos_hil(context, *args, **kwargs):
+    """Sensor real por USB y seguimiento del cubo real (solo hil:=true)."""
+    if LaunchConfiguration('hil').perform(context) != 'true':
+        return []
+    return [
+        Node(
+            package='grupo2_pkg',
+            executable='proximity_sensor_node',
+            output='screen',
+            parameters=[{
+                'port': LaunchConfiguration('sensor_port').perform(context),
+                'baud': 115200,
+            }],
+        ),
+        Node(
+            package='grupo2_pkg',
+            executable='cubo_hil',
+            output='screen',
+            parameters=[{
+                'sensor_y': float(LaunchConfiguration('sensor_y').perform(context)),
+                'cubo_x': CUBO_X,
+                'cubo_z': CUBO_Z,
+            }],
+        ),
+    ]
+
+
 def generate_launch_description():
     simulacion = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
@@ -125,6 +165,9 @@ def generate_launch_description():
             'mode': 'sim',
             'scene': ESCENA,
             'rviz': LaunchConfiguration('rviz'),
+            'bridge_args': PythonExpression([
+                "'-p proximity.topic:=proximity_sim' if '",
+                LaunchConfiguration('hil'), "' == 'true' else ''"]),
         }.items(),
     )
 
@@ -139,7 +182,14 @@ def generate_launch_description():
                               description='Velocidad de la cinta automatica en +Y (m/s)'),
         DeclareLaunchArgument('cube_delay', default_value='0.0',
                               description='Segundos tras la pose inicial antes de arrancar la cinta'),
+        DeclareLaunchArgument('hil', default_value='false', choices=['true', 'false'],
+                              description='Hardware in the loop: el cubo sigue al sensor real por USB'),
+        DeclareLaunchArgument('sensor_port', default_value='/dev/ttyACM0',
+                              description='Puerto serie del Arduino del sensor (solo hil:=true)'),
+        DeclareLaunchArgument('sensor_y', default_value='-0.90',
+                              description='Posicion en la via (y mundo) del sensor real (solo hil:=true)'),
         al_terminar_pose_inicial([OpaqueFunction(function=nodos_tras_pose_inicial)]),
+        OpaqueFunction(function=nodos_hil),
         simulacion,
         orden_arranque(),
     ])
